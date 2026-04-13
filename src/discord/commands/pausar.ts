@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { requirePlaying, requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 export const pausarCommand: SlashCommand = {
@@ -9,31 +10,31 @@ export const pausarCommand: SlashCommand = {
     const guildId = interaction.guildId;
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
     const sameChannel = requireSameChannel(interaction, services);
 
     if (!sameChannel.ok) {
-      await interaction.reply({ content: sameChannel.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     const playing = requirePlaying(guildId, services);
 
     if (!playing.ok) {
-      await interaction.reply({ content: playing.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(playing.error));
       return;
     }
 
     const result = services.playerManager.pause(guildId);
 
     if (!result.ok || !result.value) {
-      await interaction.reply({ content: 'Nao foi possivel pausar o player.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Nao foi possivel pausar o player.'));
       return;
     }
 
-    await interaction.reply('Reproducao pausada.');
+    await interaction.reply(formatSuccessMessage('Reproducao pausada.'));
   }
 };

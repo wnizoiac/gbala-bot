@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 export const retomarCommand: SlashCommand = {
@@ -9,24 +10,24 @@ export const retomarCommand: SlashCommand = {
     const guildId = interaction.guildId;
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
     const sameChannel = requireSameChannel(interaction, services);
 
     if (!sameChannel.ok) {
-      await interaction.reply({ content: sameChannel.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     const result = services.playerManager.resume(guildId);
 
     if (!result.ok || !result.value) {
-      await interaction.reply({ content: 'Nao foi possivel retomar o player.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Nao foi possivel retomar o player.'));
       return;
     }
 
-    await interaction.reply('Reproducao retomada.');
+    await interaction.reply(formatSuccessMessage('Reproducao retomada.'));
   }
 };

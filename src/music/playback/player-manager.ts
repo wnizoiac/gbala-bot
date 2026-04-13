@@ -26,6 +26,16 @@ export type PlayerOperationResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: PlayerErrorCode; message: string } };
 
+export interface PlayerSnapshot {
+  guildId: string;
+  currentTrack: QueueItem | null;
+  pendingTracks: QueueItem[];
+  loopMode: LoopMode;
+  volume: number;
+  isPlaying: boolean;
+  isPaused: boolean;
+}
+
 interface PlayerSession {
   consecutiveErrorSkips: number;
   currentProcess: ChildProcess | null;
@@ -35,8 +45,12 @@ interface PlayerSession {
   volume: number;
 }
 
+type PlayerStateListener = (snapshot: PlayerSnapshot) => void | Promise<void>;
+
 export class PlayerManager {
   private readonly sessions = new Map<string, PlayerSession>();
+  private readonly stateListeners = new Set<PlayerStateListener>();
+  private readonly preferredVolumes = new Map<string, number>();
 
   constructor(
     private readonly logger: Logger,
@@ -46,6 +60,30 @@ export class PlayerManager {
     private readonly idleHandler: IdleHandler,
     private readonly maxConsecutiveErrorSkips = 3
   ) {}
+
+  onStateChange(listener: PlayerStateListener): () => void {
+    this.stateListeners.add(listener);
+
+    return () => {
+      this.stateListeners.delete(listener);
+    };
+  }
+
+  snapshot(guildId: string): PlayerSnapshot {
+    const state = this.queueManager.snapshot(guildId);
+    const status = this.sessions.get(guildId)?.player.state.status;
+
+    return {
+      guildId,
+      currentTrack: state.current,
+      pendingTracks: [...state.items],
+      loopMode: state.loopMode,
+      volume: this.getVolume(guildId),
+      isPlaying: status === AudioPlayerStatus.Playing,
+      isPaused:
+        status === AudioPlayerStatus.Paused || status === AudioPlayerStatus.AutoPaused
+    };
+  }
 
   async play(guildId: string): Promise<PlayerOperationResult<QueueItem>> {
     const connection = this.connectionManager.get(guildId);
@@ -76,7 +114,7 @@ export class PlayerManager {
       };
     }
 
-    const result = await this.startTrack(guildId, nextTrack);
+    const result = await this.startTrackWithRecovery(guildId, nextTrack);
     return result;
   }
 
@@ -93,7 +131,13 @@ export class PlayerManager {
       };
     }
 
-    return { ok: true, value: session.player.pause() };
+    const paused = session.player.pause();
+
+    if (paused) {
+      this.emitStateChange(guildId);
+    }
+
+    return { ok: true, value: paused };
   }
 
   resume(guildId: string): PlayerOperationResult<boolean> {
@@ -110,7 +154,13 @@ export class PlayerManager {
     }
 
     this.idleHandler.cancel(guildId);
-    return { ok: true, value: session.player.unpause() };
+    const resumed = session.player.unpause();
+
+    if (resumed) {
+      this.emitStateChange(guildId);
+    }
+
+    return { ok: true, value: resumed };
   }
 
   async skip(guildId: string): Promise<PlayerOperationResult<QueueItem | null>> {
@@ -134,7 +184,7 @@ export class PlayerManager {
       return { ok: true, value: null };
     }
 
-    const result = await this.startTrack(guildId, nextTrack);
+    const result = await this.startTrackWithRecovery(guildId, nextTrack);
 
     if (!result.ok) {
       return result;
@@ -149,6 +199,7 @@ export class PlayerManager {
     if (!session) {
       if (clearQueue) {
         this.queueManager.clear(guildId);
+        this.emitStateChange(guildId);
       }
 
       return { ok: true, value: false };
@@ -163,25 +214,51 @@ export class PlayerManager {
       this.queueManager.clear(guildId);
     }
 
+    this.emitStateChange(guildId);
     this.scheduleIdleDisconnect(guildId);
     return { ok: true, value: true };
   }
 
   setVolume(guildId: string, volumePercent: number): PlayerOperationResult<number> {
-    const session = this.getOrCreateSession(guildId);
     const normalized = Math.max(0, Math.min(volumePercent, 100)) / 100;
-    session.volume = normalized;
-    session.currentResource?.volume?.setVolume(normalized);
+    const session = this.sessions.get(guildId);
+
+    this.preferredVolumes.set(guildId, normalized);
+
+    if (session) {
+      session.volume = normalized;
+      session.currentResource?.volume?.setVolume(normalized);
+    }
+
+    this.emitStateChange(guildId);
 
     return { ok: true, value: Math.round(normalized * 100) };
   }
 
   getVolume(guildId: string): number {
-    return Math.round((this.sessions.get(guildId)?.volume ?? 1) * 100);
+    return Math.round(
+      (this.sessions.get(guildId)?.volume ?? this.preferredVolumes.get(guildId) ?? 1) * 100
+    );
   }
 
   isPlaying(guildId: string): boolean {
     return this.sessions.get(guildId)?.player.state.status === AudioPlayerStatus.Playing;
+  }
+
+  activeSessionCount(): number {
+    return this.sessions.size;
+  }
+
+  activePlaybackCount(): number {
+    let count = 0;
+
+    for (const guildId of this.sessions.keys()) {
+      if (this.snapshot(guildId).currentTrack) {
+        count += 1;
+      }
+    }
+
+    return count;
   }
 
   handleVoiceDisconnected(guildId: string): void {
@@ -196,6 +273,7 @@ export class PlayerManager {
     session.player.stop(true);
     this.sessions.delete(guildId);
     this.queueManager.clear(guildId);
+    this.emitStateChange(guildId);
     this.logger.info({ guildId }, 'Player limpo apos desconexao de voz');
   }
 
@@ -229,7 +307,7 @@ export class PlayerManager {
       currentResource: null,
       player,
       suppressNextIdleAdvance: false,
-      volume: 1
+      volume: this.preferredVolumes.get(guildId) ?? 1
     };
 
     this.bindPlayerEvents(guildId, session);
@@ -241,6 +319,7 @@ export class PlayerManager {
     session.player.on(AudioPlayerStatus.Playing, () => {
       this.idleHandler.cancel(guildId);
       this.logger.info({ guildId, trackId: this.queueManager.current(guildId)?.trackId }, 'Playback iniciado');
+      this.emitStateChange(guildId);
     });
 
     session.player.on(AudioPlayerStatus.Idle, () => {
@@ -271,6 +350,7 @@ export class PlayerManager {
       session.currentResource.volume?.setVolume(session.volume);
       session.player.play(playback.resource);
       session.consecutiveErrorSkips = 0;
+      this.emitStateChange(guildId);
 
       this.logger.info({ guildId, trackId: track.trackId, title: track.title }, 'Faixa enviada ao player');
       return { ok: true, value: track };
@@ -284,6 +364,60 @@ export class PlayerManager {
         }
       };
     }
+  }
+
+  private async startTrackWithRecovery(
+    guildId: string,
+    initialTrack: QueueItem
+  ): Promise<PlayerOperationResult<QueueItem>> {
+    let track: QueueItem | null = initialTrack;
+    let consecutiveFailures = 0;
+    let lastFailure: PlayerOperationResult<QueueItem> | null = null;
+
+    while (track) {
+      const result = await this.startTrack(guildId, track);
+
+      if (result.ok) {
+        return result;
+      }
+
+      lastFailure = result;
+      consecutiveFailures += 1;
+
+      this.logger.warn(
+        { guildId, trackId: track.trackId, attempt: consecutiveFailures },
+        'Falha ao iniciar faixa; tentando avancar para a proxima'
+      );
+
+      if (consecutiveFailures >= this.maxConsecutiveErrorSkips) {
+        this.logger.error({ guildId }, 'Limite de falhas consecutivas ao iniciar playback atingido');
+        await this.stop(guildId, true);
+        return result;
+      }
+
+      const discardResult = this.queueManager.discardCurrent(guildId);
+
+      if (!discardResult.ok) {
+        this.emitStateChange(guildId);
+        this.scheduleIdleDisconnect(guildId);
+        return result;
+      }
+
+      track = discardResult.value;
+    }
+
+    this.emitStateChange(guildId);
+    this.scheduleIdleDisconnect(guildId);
+
+    return (
+      lastFailure ?? {
+        ok: false,
+        error: {
+          code: 'QUEUE_EMPTY',
+          message: 'Nao ha faixas disponiveis para reproducao.'
+        }
+      }
+    );
   }
 
   private async handleIdle(guildId: string): Promise<void> {
@@ -304,11 +438,12 @@ export class PlayerManager {
     const nextTrack = this.dequeueAdvancingTrack(guildId, this.queueManager.snapshot(guildId).loopMode);
 
     if (!nextTrack) {
+      this.emitStateChange(guildId);
       this.scheduleIdleDisconnect(guildId);
       return;
     }
 
-    await this.startTrack(guildId, nextTrack);
+    await this.startTrackWithRecovery(guildId, nextTrack);
   }
 
   private async handlePlayerError(guildId: string, err: Error): Promise<void> {
@@ -336,11 +471,12 @@ export class PlayerManager {
     const nextTrack = this.dequeueAdvancingTrack(guildId, this.queueManager.snapshot(guildId).loopMode);
 
     if (!nextTrack) {
+      this.emitStateChange(guildId);
       this.scheduleIdleDisconnect(guildId);
       return;
     }
 
-    await this.startTrack(guildId, nextTrack);
+    await this.startTrackWithRecovery(guildId, nextTrack);
   }
 
   private dequeueNextTrack(guildId: string): QueueItem | null {
@@ -389,5 +525,15 @@ export class PlayerManager {
     session.currentProcess.kill('SIGKILL');
     session.currentProcess.removeAllListeners();
     session.currentProcess = null;
+  }
+
+  private emitStateChange(guildId: string): void {
+    const snapshot = this.snapshot(guildId);
+
+    for (const listener of this.stateListeners) {
+      void Promise.resolve(listener(snapshot)).catch((err: unknown) => {
+        this.logger.error({ err, guildId }, 'Falha ao notificar listener do player');
+      });
+    }
   }
 }

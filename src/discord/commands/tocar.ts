@@ -2,6 +2,7 @@ import type { DiscordGatewayAdapterCreator } from '@discordjs/voice';
 import { SlashCommandBuilder } from 'discord.js';
 
 import { requireCachedGuild, requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatErrorMessage, formatInfoMessage, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 import { createQueueItem, findTracks, formatTrack } from './music-command-support';
@@ -38,21 +39,21 @@ export const tocarCommand: SlashCommand = {
     const query = interaction.options.getString('busca', true);
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
     const cachedGuild = requireCachedGuild(interaction);
 
     if (!cachedGuild.ok) {
-      await interaction.reply({ content: cachedGuild.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(cachedGuild.error));
       return;
     }
 
     const voiceChannel = requireSameChannel(interaction, services);
 
     if (!voiceChannel.ok) {
-      await interaction.reply({ content: voiceChannel.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(voiceChannel.error));
       return;
     }
 
@@ -64,11 +65,19 @@ export const tocarCommand: SlashCommand = {
     const track = matches[0];
 
     if (!track) {
-      await interaction.reply(`Nenhuma faixa encontrada para "${query}".`);
+      await interaction.reply(formatInfoMessage(`Nenhuma faixa encontrada para "${query}".`));
       return;
     }
 
     await interaction.deferReply();
+    services.nowPlayingPanel.rememberChannel(guildId, interaction.channelId);
+
+    const guildSettings = services.guildSettingsRepository.findByGuildId(guildId);
+
+    if (guildSettings) {
+      services.queueManager.setLoopMode(guildId, guildSettings.preferredLoopMode);
+      services.playerManager.setVolume(guildId, guildSettings.defaultVolume);
+    }
 
     try {
       await services.connectionManager.join({
@@ -78,7 +87,9 @@ export const tocarCommand: SlashCommand = {
       });
     } catch {
       await interaction.editReply(
-        'Nao foi possivel conectar no canal de voz. Verifique permissoes de conectar/falar e tente novamente.'
+        formatErrorMessage(
+          'Nao foi possivel conectar no canal de voz. Verifique permissoes de conectar/falar e tente novamente.'
+        )
       );
       return;
     }
@@ -91,14 +102,15 @@ export const tocarCommand: SlashCommand = {
       const playback = await services.playerManager.play(guildId);
 
       if (!playback.ok) {
-        await interaction.editReply(playback.error.message);
+        await interaction.editReply(formatErrorMessage(playback.error.message));
         return;
       }
 
-      await interaction.editReply(`Tocando agora: ${formatTrack(queueItem)}`);
+      await interaction.editReply(formatSuccessMessage(`Tocando agora: ${formatTrack(queueItem)}`));
       return;
     }
 
-    await interaction.editReply(`Faixa adicionada a fila: ${formatTrack(queueItem)}`);
+    await services.nowPlayingPanel.sync(guildId);
+    await interaction.editReply(formatSuccessMessage(`Faixa adicionada a fila: ${formatTrack(queueItem)}`));
   }
 };

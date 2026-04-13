@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 
+import { createEphemeralError, formatErrorMessage, formatInfoMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 import { formatTrack } from './music-command-support';
@@ -17,7 +18,7 @@ export const filaCommand: SlashCommand = {
     const guildId = interaction.guildId;
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
@@ -26,14 +27,14 @@ export const filaCommand: SlashCommand = {
     const page = interaction.options.getInteger('pagina') ?? 1;
 
     if (!current && pending.length === 0) {
-      await interaction.reply('A fila esta vazia.');
+      await interaction.reply(formatInfoMessage('A fila esta vazia.'));
       return;
     }
 
     const totalPages = Math.max(1, Math.ceil(pending.length / PAGE_SIZE));
 
     if (page > totalPages) {
-      await interaction.reply(`Pagina invalida. Total de paginas: ${totalPages}.`);
+      await interaction.reply(formatErrorMessage(`Pagina invalida. Total de paginas: ${totalPages}.`));
       return;
     }
 

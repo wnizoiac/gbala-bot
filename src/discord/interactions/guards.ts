@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, VoiceBasedChannel } from 'discord.js';
+import type { ButtonInteraction, ChatInputCommandInteraction, VoiceBasedChannel } from 'discord.js';
 
 import type { Result } from '../../shared/types';
 import type { CommandServices } from '../types';
@@ -57,6 +57,42 @@ export function requireSameChannel(
   }
 
   return voiceChannel;
+}
+
+export function requireButtonSameChannel(
+  interaction: ButtonInteraction,
+  services?: CommandServices
+): Result<VoiceBasedChannel, string> {
+  if (!interaction.inCachedGuild()) {
+    return { ok: false, error: 'Este botao so pode ser usado dentro de uma guild.' };
+  }
+
+  const channel = interaction.member.voice.channel;
+
+  if (!channel) {
+    return { ok: false, error: 'Entre em um canal de voz antes de usar este botao.' };
+  }
+
+  if (!services) {
+    return { ok: true, value: channel };
+  }
+
+  const guildId = interaction.guildId;
+
+  if (!guildId) {
+    return { ok: false, error: 'Guild invalida para esta interacao.' };
+  }
+
+  const botChannelId = services.connectionManager.getChannelId(guildId);
+
+  if (botChannelId && botChannelId !== channel.id) {
+    return {
+      ok: false,
+      error: 'Voce precisa estar no mesmo canal de voz que o bot.'
+    };
+  }
+
+  return { ok: true, value: channel };
 }
 
 export function requirePlaying(guildId: string, services: CommandServices): Result<void, string> {

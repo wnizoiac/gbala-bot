@@ -202,6 +202,32 @@ describe('QueueManager', () => {
     expect(manager.history('guild').map((item) => item.id)).toEqual(['1']);
   });
 
+  it('discardCurrent descarta a faixa atual sem mandar para o historico', () => {
+    const manager = new QueueManager();
+    manager.enqueue('guild', createItem('1'));
+    manager.enqueue('guild', createItem('2'));
+    manager.dequeue('guild');
+
+    const result = manager.discardCurrent('guild');
+
+    expect(result.ok && result.value?.id).toBe('2');
+    expect(manager.current('guild')?.id).toBe('2');
+    expect(manager.history('guild')).toEqual([]);
+  });
+
+  it('discardCurrent esvazia a fila quando a atual era a ultima faixa', () => {
+    const manager = new QueueManager();
+    manager.enqueue('guild', createItem('1'));
+    manager.dequeue('guild');
+
+    const result = manager.discardCurrent('guild');
+
+    expect(result.ok && result.value).toBeNull();
+    expect(manager.current('guild')).toBeNull();
+    expect(manager.isEmpty('guild')).toBe(true);
+    expect(manager.history('guild')).toEqual([]);
+  });
+
   it('clear tambem limpa o historico', () => {
     const manager = new QueueManager();
     manager.enqueue('guild', createItem('1'));

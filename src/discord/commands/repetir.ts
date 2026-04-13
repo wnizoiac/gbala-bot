@@ -1,6 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import type { LoopMode } from '../../music/queue/queue-state';
+import { requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 const loopLabels: Record<LoopMode, string> = {
@@ -29,11 +31,21 @@ export const repetirCommand: SlashCommand = {
     const mode = interaction.options.getString('modo', true) as LoopMode;
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
+      return;
+    }
+
+    const sameChannel = requireSameChannel(interaction, services);
+
+    if (!sameChannel.ok) {
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     services.queueManager.setLoopMode(guildId, mode);
-    await interaction.reply(`Modo de repeticao atualizado para ${loopLabels[mode]}.`);
+    const currentVolume = services.playerManager.getVolume(guildId);
+    services.guildSettingsRepository.upsert(guildId, currentVolume, mode);
+    await services.nowPlayingPanel.sync(guildId);
+    await interaction.reply(formatSuccessMessage(`Modo de repeticao atualizado para ${loopLabels[mode]}.`));
   }
 };

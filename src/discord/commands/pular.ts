@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { requireQueue, requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatInfoMessage, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 import { formatTrack } from './music-command-support';
@@ -11,36 +12,36 @@ export const pularCommand: SlashCommand = {
     const guildId = interaction.guildId;
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
     const sameChannel = requireSameChannel(interaction, services);
 
     if (!sameChannel.ok) {
-      await interaction.reply({ content: sameChannel.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     const queue = requireQueue(guildId, services);
 
     if (!queue.ok) {
-      await interaction.reply({ content: queue.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(queue.error));
       return;
     }
 
     const result = await services.playerManager.skip(guildId);
 
     if (!result.ok) {
-      await interaction.reply({ content: result.error.message, ephemeral: true });
+      await interaction.reply(createEphemeralError(result.error.message));
       return;
     }
 
     if (!result.value) {
-      await interaction.reply('A fila terminou apos o skip.');
+      await interaction.reply(formatInfoMessage('A fila terminou apos o skip.'));
       return;
     }
 
-    await interaction.reply(`Proxima faixa: ${formatTrack(result.value)}`);
+    await interaction.reply(formatSuccessMessage(`Proxima faixa: ${formatTrack(result.value)}`));
   }
 };

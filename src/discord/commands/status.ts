@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 
+import { formatInfoMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 function toMegabytes(value: number): string {
@@ -8,14 +9,22 @@ function toMegabytes(value: number): string {
 
 export const statusCommand: SlashCommand = {
   data: new SlashCommandBuilder().setName('status').setDescription('Exibe o status atual do bot'),
-  async execute({ interaction }): Promise<void> {
+  async execute({ interaction, services }): Promise<void> {
     const uptimeSeconds = Math.floor(process.uptime());
     const guildCount = interaction.client.guilds.cache.size;
     const memory = process.memoryUsage();
+    const indexedTracks = services.tracksRepository.count();
+    const queueGuilds = services.queueManager.activeGuildCount();
+    const playerSessions = services.playerManager.activeSessionCount();
+    const activePlaybacks = services.playerManager.activePlaybackCount();
 
     const lines = [
-      `Uptime: ${uptimeSeconds}s`,
+      formatInfoMessage(`Uptime: ${uptimeSeconds}s`),
       `Guilds: ${guildCount}`,
+      `Faixas indexadas: ${indexedTracks}`,
+      `Guilds com fila ativa: ${queueGuilds}`,
+      `Sessoes de voz ativas: ${playerSessions}`,
+      `Reproducoes ativas: ${activePlaybacks}`,
       `Memoria RSS: ${toMegabytes(memory.rss)} MB`,
       `Memoria Heap: ${toMegabytes(memory.heapUsed)} MB / ${toMegabytes(memory.heapTotal)} MB`
     ];

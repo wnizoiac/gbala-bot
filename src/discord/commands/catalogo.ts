@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { searchCatalog } from '../../music/catalog/search';
+import { formatErrorMessage, formatInfoMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 const PAGE_SIZE = 10;
@@ -34,14 +35,16 @@ export const catalogoCommand: SlashCommand = {
     const results = searchCatalog(tracks, busca);
 
     if (results.length === 0) {
-      await interaction.editReply('Nenhuma faixa encontrada no catalogo.');
+      await interaction.editReply(formatInfoMessage('Nenhuma faixa encontrada no catalogo.'));
       return;
     }
 
     const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
 
     if (pagina > totalPages) {
-      await interaction.editReply(`Pagina invalida. Total de paginas disponiveis: ${totalPages}.`);
+      await interaction.editReply(
+        formatErrorMessage(`Pagina invalida. Total de paginas disponiveis: ${totalPages}.`)
+      );
       return;
     }
 

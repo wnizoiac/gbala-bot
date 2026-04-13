@@ -3,6 +3,7 @@ import {
   advanceQueue,
   clearQueueState,
   createQueueState,
+  discardCurrentTrack,
   enqueueItem,
   isQueueEmpty,
   moveQueueItem,
@@ -75,6 +76,17 @@ export class QueueManager {
     return this.getState(guildId).current;
   }
 
+  discardCurrent(guildId: string): QueueOperationResult<QueueItem | null> {
+    const result = discardCurrentTrack(this.getState(guildId));
+
+    if (!result.ok) {
+      return result;
+    }
+
+    this.setState(guildId, result.value.state);
+    return { ok: true, value: result.value.current };
+  }
+
   removeAt(guildId: string, position: number): QueueOperationResult<QueueItem> {
     const result = removeItemAt(this.getState(guildId), position);
 
@@ -134,6 +146,18 @@ export class QueueManager {
 
   history(guildId: string): QueueItem[] {
     return this.getHistory(guildId).list();
+  }
+
+  activeGuildCount(): number {
+    let count = 0;
+
+    for (const guildId of this.states.keys()) {
+      if (!this.isEmpty(guildId)) {
+        count += 1;
+      }
+    }
+
+    return count;
   }
 
   snapshot(guildId: string): QueueState {

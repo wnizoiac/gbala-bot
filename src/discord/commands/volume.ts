@@ -1,5 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
+import { requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 export const volumeCommand: SlashCommand = {
@@ -14,17 +16,28 @@ export const volumeCommand: SlashCommand = {
     const value = interaction.options.getInteger('valor', true);
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
+      return;
+    }
+
+    const sameChannel = requireSameChannel(interaction, services);
+
+    if (!sameChannel.ok) {
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     const result = services.playerManager.setVolume(guildId, value);
 
     if (!result.ok) {
-      await interaction.reply({ content: result.error.message, ephemeral: true });
+      await interaction.reply(createEphemeralError(result.error.message));
       return;
     }
 
-    await interaction.reply(`Volume ajustado para ${result.value}%.`);
+    const currentLoopMode = services.queueManager.snapshot(guildId).loopMode;
+    services.guildSettingsRepository.upsert(guildId, result.value, currentLoopMode);
+    await services.nowPlayingPanel.sync(guildId);
+
+    await interaction.reply(formatSuccessMessage(`Volume ajustado para ${result.value}%.`));
   }
 };

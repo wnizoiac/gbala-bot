@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { requireQueue, requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 export const embaralharCommand: SlashCommand = {
@@ -9,25 +10,26 @@ export const embaralharCommand: SlashCommand = {
     const guildId = interaction.guildId;
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
     const sameChannel = requireSameChannel(interaction, services);
 
     if (!sameChannel.ok) {
-      await interaction.reply({ content: sameChannel.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     const queue = requireQueue(guildId, services);
 
     if (!queue.ok) {
-      await interaction.reply({ content: queue.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(queue.error));
       return;
     }
 
     services.queueManager.shuffle(guildId);
-    await interaction.reply('Fila embaralhada.');
+    await services.nowPlayingPanel.sync(guildId);
+    await interaction.reply(formatSuccessMessage('Fila embaralhada.'));
   }
 };

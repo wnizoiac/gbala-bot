@@ -2,7 +2,7 @@
   "name": "gbala-bot",
   "version": "0.1.0",
   "private": true,
-  "description": "Discord music bot foundation",
+  "description": "Discord music bot with local catalog, queue, voice playback and control panel",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -20,6 +20,7 @@
     "discord.js": "^14.26.2",
     "dotenv": "^16.4.7",
     "music-metadata": "^11.12.3",
+    "opusscript": "^0.0.8",
     "pino": "^9.5.0",
     "zod": "^3.24.1"
   },

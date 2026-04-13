@@ -4,63 +4,52 @@
 
 Data de referencia: 2026-04-13
 
-Fase concluida: FASE 1 - Camada Discord minima
+Fase atual: FASE 8 - Polimento e release
 
-O que foi implementado nesta base:
+O que ja existe na base:
 
-- Projeto inicial em TypeScript com modo strict
-- Regra noUncheckedIndexedAccess ativa
-- Scripts padrao de desenvolvimento, build, start, lint, typecheck e teste
-- ESLint e Prettier configurados
-- Validacao de variaveis de ambiente no boot
-- Resolucao de caminhos cross-platform
-- Logger estruturado em JSON com pino
-- Bootstrap com encerramento gracioso via SIGINT e SIGTERM
-- Pipeline de CI no GitHub Actions para Node 22 e 24
-- Teste inicial com Vitest
-- Cliente Discord com intent minima para guilds
-- Registro dinamico de slash commands
-- Handler generico para interactions
-- Comandos slash ping e status
-- Error boundary por comando com resposta de fallback
-- Logging estruturado por interaction
+- catalogo local com scanner recursivo, metadata e persistencia em SQLite
+- comandos `/catalogo`, `/tocar`, `/agora`, `/fila`, `/historico`
+- fila por guild com move, remove, shuffle, loop e historico separado
+- playback local com `ConnectionManager`, `AudioResourceFactory`, `PlayerManager` e `IdleHandler`
+- painel now playing com embed, botoes, validacao de contexto e debounce
+- persistencia de `defaultVolume` e `preferredLoopMode` por guild
+- cooldown anti-spam para slash commands e botoes
+- respostas padronizadas na camada Discord
+- `/status` com metricas de catalogo, fila e playback
+- testes automatizados para queue, playback, panel, storage, metadata e cooldown
 
 Arquivos principais atuais:
 
 - package.json
-- tsconfig.json
-- tsconfig.eslint.json
-- eslint.config.mjs
-- .prettierrc
+- README.md
 - .env.example
-- src/config/constants.ts
-- src/config/env.ts
-- src/config/paths.ts
-- src/discord/client.ts
+- src/main.ts
 - src/discord/command-handler.ts
 - src/discord/commands-registry.ts
-- src/discord/commands/ping.ts
-- src/discord/commands/status.ts
-- src/discord/register-commands.ts
-- src/discord/types.ts
-- src/shared/logger.ts
-- src/main.ts
-- vitest.config.ts
-- tests/smoke.test.ts
-- .github/workflows/ci.yml
+- src/discord/panel/now-playing-panel.ts
+- src/discord/interactions/buttons.ts
+- src/music/catalog/*
+- src/music/queue/*
+- src/music/playback/*
+- src/storage/db.ts
+- src/storage/repositories/tracks-repo.ts
+- src/storage/repositories/guild-settings-repo.ts
+- tests/*.test.ts
 
 Validacoes executadas com sucesso:
 
 - npm run lint
 - npm run typecheck
 - npm run test
-- npm run build
 
 Comportamento validado:
 
-- O boot falha com mensagem clara quando DISCORD_TOKEN e MEDIA_ROOT nao estao definidos
-- O handler de commands nao derruba o processo em caso de falha de execucao
-- Comandos podem ser registrados globalmente ou por guild via DISCORD_GUILD_ID
+- boot falha cedo quando variaveis criticas faltam
+- scanner indexa catalogo local e ignora arquivos invalidos
+- playback local avanca para a proxima faixa quando a atual falha
+- painel acompanha o estado real do player e respeita cooldown/debounce
+- volume e loop preferidos sobrevivem a reinicio
 
 ## Decisoes de arquitetura aplicadas
 
@@ -69,40 +58,21 @@ Comportamento validado:
 - Nenhuma logica de musica, fila, playback ou catalogo iniciada antes da fase correta
 - Nenhuma abstracao prematura de provider criada
 
-## Proxima fase de execucao
+## Proximo foco de execucao
 
-## FASE 2 - Catalogo local de midia
+## FASE 8 - Fechamento
 
 Objetivo:
 
-- Permitir que o bot enxergue, valide e indexe musicas locais
+- concluir polimento de documentacao, operacao e release inicial
 
-Entregaveis previstos:
+Entregaveis prioritarios restantes:
 
-- src/storage/db.ts
-- migrations iniciais da tabela de tracks
-- src/storage/repositories/tracks-repo.ts
-- src/music/catalog/scanner.ts
-- src/music/catalog/metadata.ts
-- src/music/catalog/search.ts
-- src/discord/commands/catalogo.ts
-- testes unitarios de search.ts e metadata.ts
-- testes de integracao de tracks-repo.ts com SQLite in-memory
-
-Regras obrigatorias desta fase:
-
-- Definir extensoes aceitas para audio local
-- Normalizar nomes para busca sem acentos e sem caracteres especiais
-- Gerar id interno estavel por faixa a partir do path relativo
-- Ignorar arquivos invalidos sem quebrar o scan
-- Diferenciar estado persistente de estado efemero
-
-Criterio de saida da Fase 2:
-
-- Scanner varre pasta e indexa corretamente
-- /catalogo exibe faixas indexadas com busca e paginacao
-- Arquivos problematicos sao logados e ignorados
-- Testes de search, metadata e repositorio passam
+- README final completo com instalacao Linux/Windows
+- checklist de setup do bot no Discord
+- checklist de deploy/operacao
+- limpeza fina de codigo e nomenclatura restante
+- preparacao para release/tag quando desejado
 
 ## Macro-roadmap das fases seguintes
 
@@ -162,11 +132,9 @@ Criterio de saida da Fase 2:
 
 ## Proximo passo objetivo
 
-Iniciar implementacao da FASE 2 com:
+Fechar a FASE 8 com:
 
-1. camada SQLite e repositorio de tracks
-2. scanner recursivo de media local
-3. extracao e fallback de metadata
-4. busca normalizada no catalogo
-5. comando /catalogo
-6. testes unitarios e de integracao da fase
+1. revisao final da documentacao operacional
+2. limpeza fina de trechos restantes do codigo
+3. checklist de release
+4. tag/empacotamento quando houver decisao de versao

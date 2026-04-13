@@ -191,6 +191,35 @@ export function clearQueueState(state: QueueState): QueueState {
   };
 }
 
+export function discardCurrentTrack(
+  state: QueueState
+): QueueOperationResult<{ state: QueueState; removed: QueueItem; current: QueueItem | null }> {
+  if (!state.current) {
+    return {
+      ok: false,
+      error: {
+        code: 'NO_CURRENT_TRACK',
+        message: 'Nao existe faixa atual para descartar.'
+      }
+    };
+  }
+
+  const [nextCurrent, ...rest] = state.items.map((item) => ({ ...item }));
+
+  return {
+    ok: true,
+    value: {
+      removed: { ...state.current },
+      current: nextCurrent ?? null,
+      state: {
+        current: nextCurrent ?? null,
+        items: rest,
+        loopMode: state.loopMode
+      }
+    }
+  };
+}
+
 export function advanceQueue(
   state: QueueState
 ): QueueOperationResult<{ state: QueueState; previous: QueueItem | null; current: QueueItem | null }> {

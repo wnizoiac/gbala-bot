@@ -7,6 +7,7 @@ import { resolvePaths } from './config/paths';
 import { createDiscordClient } from './discord/client';
 import { setupCommandHandler } from './discord/command-handler';
 import { slashCommands } from './discord/commands-registry';
+import { NowPlayingPanelManager } from './discord/panel/now-playing-panel';
 import { registerCommands } from './discord/register-commands';
 import { scanCatalog } from './music/catalog/scanner';
 import { AudioResourceFactory } from './music/playback/audio-resource';
@@ -16,6 +17,7 @@ import { PlayerManager } from './music/playback/player-manager';
 import { QueueManager } from './music/queue/queue-manager';
 import { createLogger } from './shared/logger';
 import { createDatabase } from './storage/db';
+import { GuildSettingsRepository } from './storage/repositories/guild-settings-repo';
 import { TracksRepository } from './storage/repositories/tracks-repo';
 
 let shutdownStarted = false;
@@ -27,6 +29,7 @@ async function bootstrap(): Promise<void> {
   const logger = createLogger(env);
   const client = createDiscordClient(logger);
   const database = createDatabase(paths.dbPath, logger);
+  const guildSettingsRepository = new GuildSettingsRepository(database.db);
   const tracksRepository = new TracksRepository(database.db);
   const queueManager = new QueueManager();
   const idleHandler = new IdleHandler(logger, env.PLAYER_IDLE_TIMEOUT_MS);
@@ -39,10 +42,14 @@ async function bootstrap(): Promise<void> {
     audioResourceFactory,
     idleHandler
   );
+  const nowPlayingPanel = new NowPlayingPanelManager(client, logger, playerManager);
 
   connectionManager.setDisconnectHandler((guildId) => {
     playerManager.handleVoiceDisconnected(guildId);
+    void nowPlayingPanel.clear(guildId);
   });
+
+  playerManager.onStateChange((snapshot) => nowPlayingPanel.sync(snapshot.guildId));
 
   const shutdown = (reason: ShutdownReason, details?: Record<string, unknown>): void => {
     if (shutdownStarted) {
@@ -68,6 +75,8 @@ async function bootstrap(): Promise<void> {
 
   setupCommandHandler(client, slashCommands, logger, {
     connectionManager,
+    guildSettingsRepository,
+    nowPlayingPanel,
     playerManager,
     queueManager,
     tracksRepository
@@ -87,6 +96,8 @@ async function bootstrap(): Promise<void> {
     playerManager.handleVoiceDisconnected(guild.id);
     connectionManager.disconnect(guild.id);
     queueManager.clear(guild.id);
+    void nowPlayingPanel.clear(guild.id);
+    nowPlayingPanel.forget(guild.id);
 
     if (client.guilds.cache.size === 0) {
       shutdown('GUILD_REMOVED', { guildId: guild.id });

@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { requireQueue, requireSameChannel } from '../interactions/guards';
+import { createEphemeralError, formatSuccessMessage } from '../responses';
 import type { SlashCommand } from '../types';
 
 export const moverCommand: SlashCommand = {
@@ -19,31 +20,32 @@ export const moverCommand: SlashCommand = {
     const to = interaction.options.getInteger('para', true);
 
     if (!guildId) {
-      await interaction.reply({ content: 'Guild invalida para este comando.', ephemeral: true });
+      await interaction.reply(createEphemeralError('Guild invalida para este comando.'));
       return;
     }
 
     const sameChannel = requireSameChannel(interaction, services);
 
     if (!sameChannel.ok) {
-      await interaction.reply({ content: sameChannel.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(sameChannel.error));
       return;
     }
 
     const queue = requireQueue(guildId, services);
 
     if (!queue.ok) {
-      await interaction.reply({ content: queue.error, ephemeral: true });
+      await interaction.reply(createEphemeralError(queue.error));
       return;
     }
 
     const result = services.queueManager.moveTo(guildId, from, to);
 
     if (!result.ok) {
-      await interaction.reply({ content: result.error.message, ephemeral: true });
+      await interaction.reply(createEphemeralError(result.error.message));
       return;
     }
 
-    await interaction.reply(`Faixa movida da posicao ${from} para ${to}.`);
+    await services.nowPlayingPanel.sync(guildId);
+    await interaction.reply(formatSuccessMessage(`Faixa movida da posicao ${from} para ${to}.`));
   }
 };
